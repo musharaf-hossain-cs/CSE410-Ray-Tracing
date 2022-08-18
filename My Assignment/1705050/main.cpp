@@ -1,4 +1,5 @@
 #include "1705050_classes.h"
+#include "bitmap_image.hpp"
 
 
 
@@ -12,6 +13,19 @@ double rotationUnit = 0.035;
 double movementUnit = 2.0;
 
 Point pos, u, r, l;
+
+
+vector<Object*> objects;
+vector<PointLight*> pointLights;
+vector<SpotLight*> spotLights;
+
+int recursion_level;
+int dimension;
+
+
+int windowWidth = 500, windowHeight = 500;
+double viewAngle = 80;
+
 
 void drawAxes(){
 	if(drawaxes==1)
@@ -231,6 +245,199 @@ void tiltCW(){
 
 /// Task 1 End
 
+///Input
+void loadData(){
+    ifstream input;
+    input.open("scene.txt");
+
+    if(!input){
+        cout<<"Failed to load scene.txt file"<<endl;
+    }
+
+    input >> recursion_level >> dimension;
+
+    int objectCount;
+    input >> objectCount;
+
+    string shape;
+    double x,y,z,R,G,B;
+    double c1,c2,c3,c4;
+    double radius, height, width, length;
+    int shininess;
+
+    while(objectCount--){
+        input >> shape;
+
+        if(shape == "sphere"){
+            input >> x >> y >> z;
+            Point center(x,y,z);
+            input >> radius;
+            Object *ob = new Sphere(center, radius);
+
+            input >> R >> G >> B;
+            ob->setColor(Color(R,G,B));
+
+            input >> c1 >> c2 >> c3 >> c4;
+            ob->setCoefficients(c1, c2, c3, c4);
+
+            input >> shininess;
+            ob->setShine(shininess);
+
+            objects.push_back(ob);
+        }
+        else if(shape == "triangle"){
+            Point a, b, c;
+
+            input >> a.x >> a.y >> a.z;
+            input >> b.x >> b.y >> b.z;
+            input >> c.x >> c.y >> c.z;
+
+            Object *ob = new Triangle(a,b,c);
+
+            input >> R >> G >> B;
+            ob->setColor(Color(R,G,B));
+
+            input >> c1 >> c2 >> c3 >> c4;
+            ob->setCoefficients(c1, c2, c3, c4);
+
+            input >> shininess;
+            ob->setShine(shininess);
+
+            objects.push_back(ob);
+        }
+
+        else if(shape == "general"){
+            double a,b,c,d,e,f,g,h,i,j;
+            input >> a >> b >> c >> d >> e;
+            input >> f >> g >> h >> i >> j;
+
+            input >> x >> y >> z;
+            Point pos(x, y, z);
+
+            input >> length >> width >> height;
+
+            Object *ob = new GeneralShape(a,b,c,d,e,f,g,h,i,j,length,width,height,pos);
+
+            input >> R >> G >> B;
+            ob->setColor(Color(R,G,B));
+
+            input >> c1 >> c2 >> c3 >> c4;
+            ob->setCoefficients(c1, c2, c3, c4);
+
+            input >> shininess;
+            ob->setShine(shininess);
+
+            objects.push_back(ob);
+        }
+
+    }
+
+    int pointLightCount;
+    input >> pointLightCount;
+
+    while(pointLightCount--){
+        input >> x >> y >> z;
+        Point pos(x,y,z);
+
+        input >> R >> G >> B;
+        Color color(R,G,B);
+
+        PointLight *light = new PointLight(pos, color);
+        pointLights.push_back(light);
+    }
+
+    int spotLightCount;
+    input >> spotLightCount;
+
+    while(spotLightCount--){
+        input >> x >> y >> z;
+        Point pos(x,y,z);
+
+        input >> R >> G >> B;
+        Color color(R,G,B);
+
+        input >> x >> y >> z;
+        Vector dir(x,y,z);
+
+        double coa;
+        input >> coa;
+
+        SpotLight *light = new SpotLight(pos,color,dir,coa);
+        spotLights.push_back(light);
+    }
+
+    Object *ob = new Floor(1000,20);
+    ob->setCoefficients(0.5,0.5,0.5,0.5);
+    ob->setShine(10);
+    objects.push_back(ob);
+}
+
+///End Input
+
+/// Capture Method. Will be called when 0 will be pressed
+void capture(){
+    // initialize bitmap image and set background color
+    bitmap_image image(dimension, dimension);
+    for(int i=0;i<dimension; i++){
+        for(int j=0;j<dimension; j++){
+            image.set_pixel(i,j,0,0,0);
+        }
+    }
+
+    // planeDistance = (windowHeight/2.0) / tan(viewAngle/2.0)
+    double planeDistance = (0.5*windowHeight) / tan(viewAngle * pi / 360.0); // 360 = 2*180
+
+    //topleft = eye + l*planeDistance - r*windowWidth/2 + u*windowHeight/2
+    Point topLeft;
+    topLeft.x = pos.x + l.x*planeDistance - r.x * windowWidth/2 + u.x * windowHeight/2;
+    topLeft.y = pos.y + l.y*planeDistance - r.y * windowWidth/2 + u.y * windowHeight/2;
+    topLeft.z = pos.z + l.z*planeDistance - r.z * windowWidth/2 + u.z * windowHeight/2;
+
+    //du = windowWidth/imageWidth
+    double du = (double)windowWidth / dimension;
+
+    //dv = windowHeight/imageHeight
+    double dv = (double)windowHeight / dimension;
+
+    // Choose middle of the grid cell
+    // topleft = topleft + r*(0.5*du) - u*(0.5*dv)
+    topLeft.x = topLeft.x + r.x * (0.5*du) - u.x * (0.5*dv);
+    topLeft.y = topLeft.y + r.y * (0.5*du) - u.y * (0.5*dv);
+    topLeft.z = topLeft.z + r.z * (0.5*du) - u.z * (0.5*dv);
+
+    int nearest;
+    double t, tMin;
+    Point curPixel;
+
+    // for i=1:imageWidth
+    for(int i=0; i<dimension; i++){
+        // for j=1:imageHeight
+        for(int j=0; j<dimension; j++){
+            // calculate curPixel using topleft,r,u,i,j,du,dv
+            curPixel.x = topLeft.x + r.x * (du * i) - u.x * (j * dv);
+            curPixel.y = topLeft.y + r.y * (du * i) - u.y * (j * dv);
+            curPixel.z = topLeft.z + r.z * (du * i) - u.z * (j * dv);
+
+            // cast ray from eye to (curPixel-eye) direction
+            Vector dir;
+            dir.x = curPixel.x - pos.x;
+            dir.y = curPixel.y - pos.y;
+            dir.z = curPixel.z - pos.z;
+            Ray ray(pos, dir);
+
+            Color color;
+
+            // for each object, o in objects
+            for(Object* o: objects){
+                ;
+                /// will be done later
+                /// after completing intersect method
+            }
+
+        }
+    }
+
+}
 
 
 void keyboardListener(unsigned char key, int x,int y){
@@ -253,6 +460,9 @@ void keyboardListener(unsigned char key, int x,int y){
             break;
         case '6':
             tiltCW();
+            break;
+        case '0':
+            capture();
             break;
 
 

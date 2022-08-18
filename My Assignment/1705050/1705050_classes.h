@@ -14,6 +14,17 @@
 #define SPECULAR 2
 #define REFLECTION 3
 
+using namespace std;
+
+class Object;
+class PointLight;
+class SpotLight;
+
+extern vector<Object*> objects;
+extern vector<PointLight*> pointLights;
+extern vector<SpotLight*> spotLights;
+extern int recursion_level;
+
 struct Point{
     double x, y, z;
     Point(double x=0, double y=0, double z=0){
@@ -75,6 +86,16 @@ struct Color{
         g = G;
         b = B;
     }
+
+    void Normalize(){
+        if(r < 0) r = 0.0;
+        if(r > 1) r = 1.0;
+        if(g < 0) g = 0.0;
+        if(g > 1) g = 1.0;
+        if(b < 0) b = 0.0;
+        if(b > 1) b = 1.0;
+
+    }
 };
 
 
@@ -108,15 +129,15 @@ public:
     }
 
     void setColor(Color color){
-        this->color.r = color.r;
-        this->color.g = color.g;
-        this->color.b = color.b;
+        this->color = color;
+        this->color.Normalize();
     }
 
     void setColor(double R, double G, double B){
         this->color.r = R;
         this->color.g = G;
         this->color.b = B;
+        this->color.Normalize();
     }
 
     void setShine(int s){
@@ -213,8 +234,75 @@ public:
 
 class GeneralShape : public Object {
 public:
-    GeneralShape(){}
+    double A,B,C,D,E,F,G,H,I,J;
+
+    GeneralShape(){
+        A=B=C=D=E=F=G=H=I=J=0;
+    }
+
+    GeneralShape(double a, double b, double c, double d,
+                 double e, double f, double g, double h,
+                 double i, double j, double length,
+                 double width, double height, Point &pos){
+        this->reference_point = pos;
+        this->length = length;
+        this->width = width;
+        this->height = height;
+        A = a;
+        B = b;
+        C = c;
+        D = d;
+        E = e;
+        F = f;
+        G = g;
+        H = h;
+        I = i;
+        J = j;
+    }
+
+    void draw(){
+        glPushMatrix();
+        // no need to draw this
+
+        glPopMatrix();
+    }
+
 };
+
+class Floor : public Object {
+public:
+    int tileCount;
+    double tileWidth;
+
+    Floor(){}
+
+    Floor(double width, double tile){
+        reference_point = Point(-width/2, -width/2, 0);
+        tileCount = ceil(width / tile);
+        tileWidth = tile;
+    }
+
+    void draw(){
+        glPushMatrix();
+
+        int halfTile = tileCount / 2;
+        for(int i = -halfTile; i < halfTile; i++){
+            for(int j= -halfTile; j < halfTile; j++){
+                if((i+j)%2) glColor3f(0,0,0);
+                else glColor3f(1,1,1);
+                glBegin(GL_QUADS);{
+                    glVertex3f(tileWidth*i, tileWidth*j, 0);
+                    glVertex3f(tileWidth*(i+1), tileWidth*j, 0);
+                    glVertex3f(tileWidth*(i+1), tileWidth*(j+1), 0);
+                    glVertex3f(tileWidth*i, tileWidth*(j+1), 0);
+                }glEnd();
+            }
+        }
+
+        glPopMatrix();
+    }
+};
+
 
 
 class Light {
@@ -234,12 +322,14 @@ public:
 
     void setColor(Color &color){
         this->color = color;
+        this->color.Normalize();
     }
 
     void setColor(double R, double G, double B){
         color.r = R;
         color.g = G;
         color.b = B;
+        this->color.Normalize();
     }
 };
 
@@ -248,6 +338,7 @@ public:
     PointLight(Point &pos, Color &c){
         light_pos = pos;
         color = c;
+        color.Normalize();
     }
 
     PointLight(Point &pos){
@@ -283,6 +374,7 @@ public:
         color = c;
         direction = dir;
         cutoffAngle = coa;
+        color.Normalize();
     }
 
     SpotLight(Vector &dir, double coa) {
@@ -312,7 +404,17 @@ public:
 
 
 
+class Ray {
+public:
+    Point start;
+    Vector dir;
 
+    Ray(Point &start, Vector dir){
+        this->start = start;
+        this->dir = dir;
+        this->dir.Normalize();
+    }
+};
 
 
 
