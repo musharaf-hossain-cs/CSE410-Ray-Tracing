@@ -1,11 +1,6 @@
-#include<stdio.h>
-#include<stdlib.h>
-#include<math.h>
+#include "1705050_classes.h"
 
-#include <windows.h>
-#include <GL\glut.h>
 
-#define pi (2*acos(0.0))
 
 double cameraHeight;
 double cameraAngle;
@@ -16,11 +11,7 @@ double angle;
 double rotationUnit = 0.035;
 double movementUnit = 2.0;
 
-struct point{
-	double x,y,z;
-};
-
-point pos, u, r, l;
+Point pos, u, r, l;
 
 void drawAxes(){
 	if(drawaxes==1)
@@ -75,7 +66,7 @@ void drawSquare(double a){
 }
 
 void drawSphere(double radius,int slices,int stacks){
-	struct point points[100][100];
+	struct Point points[100][100];
 	int i,j;
 	double h,r;
 	//generate points
@@ -155,14 +146,14 @@ void pageDown(){
 
 // Rotations
 
-point rotateVectorCCW(point vect, point helper, double sign = 1.0){
+Point rotateVectorCCW(Point vect, Point helper, double sign = 1.0){
     double rotationSinA = sin(rotationUnit);
     double rotationCosA = cos(rotationUnit);
 
-    point temp;
+    Point temp;
     // perp(vect) is helper
-    point perpVectsinA;
-    point vectCosA;
+    Point perpVectsinA;
+    Point vectCosA;
 
     perpVectsinA.x = helper.x * rotationSinA * sign;
     perpVectsinA.y = helper.y * rotationSinA * sign;
@@ -179,13 +170,13 @@ point rotateVectorCCW(point vect, point helper, double sign = 1.0){
     return temp;
 }
 
-point rotateVectorCW(point vect, point helper, double sign = 1.0){
+Point rotateVectorCW(Point vect, Point helper, double sign = 1.0){
     double rotationSinA = sin(-rotationUnit);
     double rotationCosA = cos(-rotationUnit);
-    point temp;
+    Point temp;
     // perp(vect) is helper
-    point perpVectsinA;
-    point vectCosA;
+    Point perpVectsinA;
+    Point vectCosA;
 
     perpVectsinA.x = helper.x * rotationSinA * sign;
     perpVectsinA.y = helper.y * rotationSinA * sign;
@@ -203,37 +194,37 @@ point rotateVectorCW(point vect, point helper, double sign = 1.0){
 }
 
 void lookLeft(){
-    point tempR = rotateVectorCCW(r,l);
+    Point tempR = rotateVectorCCW(r,l);
     l = rotateVectorCCW(l,r,-1.0);
     r = tempR;
 }
 
 void lookRight(){
-    point tempL = rotateVectorCW(l,r,-1.0);
+    Point tempL = rotateVectorCW(l,r,-1.0);
     r = rotateVectorCW(r,l);
     l = tempL;
 }
 
 void lookUp(){
-    point tempL = rotateVectorCCW(l,u);
+    Point tempL = rotateVectorCCW(l,u);
     u = rotateVectorCCW(u,l,-1.0);
     l = tempL;
 }
 
 void lookDown(){
-    point tempU = rotateVectorCW(u,l,-1.0);
+    Point tempU = rotateVectorCW(u,l,-1.0);
     l = rotateVectorCW(l,u);
     u = tempU;
 }
 
 void tiltCCW(){
-    point tempU = rotateVectorCCW(u,r);
+    Point tempU = rotateVectorCCW(u,r);
     r = rotateVectorCCW(r,u,-1.0);
     u = tempU;
 }
 
 void tiltCW(){
-    point tempR = rotateVectorCW(r,u,-1.0);
+    Point tempR = rotateVectorCW(r,u,-1.0);
     u = rotateVectorCW(u,r);
     r = tempR;
 }
