@@ -144,6 +144,42 @@ public:
     }
 };
 
+void DrawSphere(double radius, Color &color, int stacks = 50,int slices = 50){
+    struct Point points[100][100];
+    int i,j;
+    double h,r;
+
+    //generate points
+    for(i=0;i<=stacks;i++){
+        h=radius*sin(((double)i/(double)stacks)*(pi/2));
+        r=radius*cos(((double)i/(double)stacks)*(pi/2));
+        for(j=0;j<=slices;j++){
+            points[i][j].x=r*cos(((double)j/(double)slices)*2*pi);
+            points[i][j].y=r*sin(((double)j/(double)slices)*2*pi);
+            points[i][j].z=h;
+        }
+    }
+    //draw quads using generated points
+    for(i=0;i<stacks;i++){
+        glColor3f(color.r, color.g, color.b);
+        for(j=0;j<slices;j++){
+            glBegin(GL_QUADS);{
+                //upper hemisphere
+                glVertex3f(points[i][j].x,points[i][j].y,points[i][j].z);
+                glVertex3f(points[i][j+1].x,points[i][j+1].y,points[i][j+1].z);
+                glVertex3f(points[i+1][j+1].x,points[i+1][j+1].y,points[i+1][j+1].z);
+                glVertex3f(points[i+1][j].x,points[i+1][j].y,points[i+1][j].z);
+                //lower hemisphere
+                glVertex3f(points[i][j].x,points[i][j].y,-points[i][j].z);
+                glVertex3f(points[i][j+1].x,points[i][j+1].y,-points[i][j+1].z);
+                glVertex3f(points[i+1][j+1].x,points[i+1][j+1].y,-points[i+1][j+1].z);
+                glVertex3f(points[i+1][j].x,points[i+1][j].y,-points[i+1][j].z);
+            }glEnd();
+        }
+    }
+}
+
+
 
 class Light {
 public:
@@ -190,10 +226,8 @@ public:
     void draw(){
         glPushMatrix();
 
-        glColor3f(color.r, color.g, color.b);
-        glBegin(GL_POINTS); {
-            glVertex3f(light_pos.x, light_pos.y, light_pos.z);
-        }glEnd();
+        glTranslatef(light_pos.x, light_pos.y, light_pos.z);
+        DrawSphere(1,color,10,10);
 
         glPopMatrix();
     }
@@ -224,11 +258,8 @@ public:
 
     void draw(){
         glPushMatrix();
-
-        glColor3f(color.r, color.g, color.b);
-        glBegin(GL_POINTS); {
-            glVertex3f(light_pos.x, light_pos.y, light_pos.z);
-        }glEnd();
+        glTranslatef(light_pos.x, light_pos.y, light_pos.z);
+        DrawSphere(1,color,10,10);
 
         glPopMatrix();
     }
@@ -241,8 +272,6 @@ public:
         cutoffAngle = coa;
     }
 };
-
-
 
 
 class Object {
@@ -276,6 +305,93 @@ public:
         return -1.0;
     }
 
+    void phongModelUtil(double tMin,Light *light, Color &newColor, Vector &ro,
+                        Vector &dir, Point &intersectionPoint, Vector &normal){
+        // cast rayl from pl.light_pos to intersectionPoint
+        Point lightPos = light->light_pos;
+        Vector rayDir = Vector(intersectionPoint, lightPos);
+        rayDir.Normalize();
+
+        // actually slightly forward from the point (by moving the
+        // start a little bit towards the reflection direction)
+        // to avoid self intersection
+        Point rayStart = intersectionPoint;
+        rayStart.x += rayDir.x * 0.000000001;
+        rayStart.y += rayDir.y * 0.000000001;
+        rayStart.z += rayDir.z * 0.000000001;
+
+        Ray *lightRay = new Ray(rayStart, rayDir);
+
+        // if intersectionPoint is in shadow, the diffuse
+        // and specular components need not be calculated
+        // for shadow, other object needed between light and object
+        bool shadow = false;
+        double t, tMin2;
+        tMin2 = INFINITY;
+        Color *dummy = new Color();
+
+        for(Object *o: objects){
+            t = o->intersect(lightRay,dummy, 0);
+            if(t > 0 && t < tMin2){
+                tMin2 = t;
+            }
+        }
+
+        if(tMin > tMin2){ // another object in between
+            shadow = true;
+        }
+//
+//            Point n;
+//            n.x = ro.x + dir.x * tMin2;
+//            n.y = ro.y + dir.y * tMin2;
+//            n.z = ro.z + dir.z * tMin2;
+//
+//            Point m = intersectionPoint;
+//
+//            double dist1 = sqrt(pow(m.x-ro.x, 2) + pow(m.y-ro.y, 2) + pow(m.z-ro.z, 2));
+//            double dist2 = sqrt(pow(n.x-ro.x, 2) + pow(n.y-ro.y, 2) + pow(n.z-ro.z, 2));
+//
+//            if((dist1 - 0.0000001) > dist2) shadow = true;
+
+        if(!shadow){
+            // calculate lambertValue using normal, rayl
+            double dotValue = Vector::DotProduct(normal,rayDir);
+            double lambertValue;
+            if(dotValue < 0.0) lambertValue = 0.0;
+            else lambertValue = dotValue;
+
+            // find reflected ray, rayr for rayl
+            // rayr = 2(dir . normal)normal – dir
+            double multiplier = dotValue * 2.0;
+            Vector reflection;
+            reflection.x = normal.x * multiplier - rayDir.x;
+            reflection.y = normal.y * multiplier - rayDir.y;
+            reflection.z = normal.z * multiplier - rayDir.z;
+
+            reflection.Normalize();
+
+            // calculate phongValue using r, rayr
+            double phongValue = Vector::DotProduct(dir, reflection);
+            if(phongValue < 0.0) phongValue = 0.0;
+
+            double phongShine = pow(phongValue, shine);
+
+            // color += pl.color*coEfficient[DIFF]*lambertValue*intersectionPointColor
+            newColor.r += light->color.r * coefficients[DIFFUSE] * lambertValue * getIntersectionPointColor(intersectionPoint).r;
+            newColor.g += light->color.g * coefficients[DIFFUSE] * lambertValue * getIntersectionPointColor(intersectionPoint).g;
+            newColor.b += light->color.b * coefficients[DIFFUSE] * lambertValue * getIntersectionPointColor(intersectionPoint).b;
+            newColor.Normalize();
+            // color+= pl.color*coEfficient[SPEC]*phongValueshine * intersectionPointColor
+            newColor.r += light->color.r * coefficients[SPECULAR] * phongShine * getIntersectionPointColor(intersectionPoint).r;
+            newColor.g += light->color.g * coefficients[SPECULAR] * phongShine * getIntersectionPointColor(intersectionPoint).g;
+            newColor.b += light->color.b * coefficients[SPECULAR] * phongShine * getIntersectionPointColor(intersectionPoint).b;
+
+            newColor.Normalize();
+        }
+        delete lightRay;
+        delete dummy;
+    }
+
     double intersectionPhongModel(Ray *r, Color *colorI, int level){
         double tMin = intersect(r,colorI, level);
 
@@ -301,81 +417,68 @@ public:
         Vector normal = this->calculateNormal(intersectionPoint);
 
         // for each point light pl in pointLights
-        for(PointLight *light: pointLights){
-            // cast rayl from pl.light_pos to intersectionPoint
-            Point lightPos = light->light_pos;
-            Vector rayDir = Vector(intersectionPoint, lightPos );
+        for(Light *light: pointLights){
+            phongModelUtil(tMin, light,newColor,ro,dir, intersectionPoint, normal);
+        }
+
+        // for each spot light in spotlights
+        for(SpotLight *light: spotLights){
+            Vector rayDir = Vector(intersectionPoint, light->light_pos);
             rayDir.Normalize();
-
-            Ray *lightRay = new Ray(intersectionPoint, rayDir);
-
-            // if intersectionPoint is in shadow, the diffuse
-            // and specular components need not be calculated
-            // for shadow, other object needed between light and object
-            bool shadow = false;
-            double t, tMin2;
-            tMin2 = INFINITY;
-            Color *dummy = new Color();
-
-            for(Object *o: objects){
-                t = o->intersect(lightRay,dummy, 0);
-                if(t > 0 && t < tMin2){
-                    tMin2 = t;
-                }
-            }
-
-//            if(tMin > tMin2){ // another object in between
-//                shadow = true;
-//            }
-
-            Point n;
-            n.x = ro.x + dir.x * tMin;
-            n.y = ro.y + dir.y * tMin;
-            n.z = ro.z + dir.z * tMin;
-
-            Point m = intersectionPoint;
-
-            double dist1 = sqrt(pow(m.x-ro.x, 2) + pow(m.y-ro.y, 2) + pow(m.z-ro.z, 2));
-            double dist2 = sqrt(pow(n.x-ro.x, 2) + pow(n.y-ro.y, 2) + pow(n.z-ro.z, 2));
-
-            if((dist1 - 0.0000001) > dist2) shadow = true;
-
-            if(!shadow){
-                // calculate lambertValue using normal, rayl
-                double dotValue = Vector::DotProduct(normal,rayDir);
-                double lambertValue;
-                if(dotValue < 0.0) lambertValue = 0.0;
-                else lambertValue = dotValue;
-
-                // find reflected ray, rayr for rayl
-                double multiplier = dotValue * 2.0;
-                Vector reflection;
-                reflection.x = normal.x * multiplier - rayDir.x;
-                reflection.y = normal.y * multiplier - rayDir.y;
-                reflection.z = normal.z * multiplier - rayDir.z;
-
-                reflection.Normalize();
-
-                // calculate phongValue using r, rayr
-                double phongValue = Vector::DotProduct(dir, reflection);
-                if(phongValue < 0.0) phongValue = 0.0;
-
-                double phongShine = pow(phongValue, shine);
-
-                // color += pl.color*coEfficient[DIFF]*lambertValue*intersectionPointColor
-                newColor.r += light->color.r * coefficients[DIFFUSE] * lambertValue * getIntersectionPointColor(intersectionPoint).r;
-                newColor.g += light->color.g * coefficients[DIFFUSE] * lambertValue * getIntersectionPointColor(intersectionPoint).g;
-                newColor.b += light->color.b * coefficients[DIFFUSE] * lambertValue * getIntersectionPointColor(intersectionPoint).b;
-                newColor.Normalize();
-                // color+= pl.color*coEfficient[SPEC]*phongValueshine * intersectionPointColor
-                newColor.r += light->color.r * coefficients[SPECULAR] * phongShine * getIntersectionPointColor(intersectionPoint).r;
-                newColor.g += light->color.g * coefficients[SPECULAR] * phongShine * getIntersectionPointColor(intersectionPoint).g;
-                newColor.b += light->color.b * coefficients[SPECULAR] * phongShine * getIntersectionPointColor(intersectionPoint).b;
-
-                newColor.Normalize();
+            double dotVal = Vector::DotProduct(rayDir, dir);
+            double rayAngle = acos(dotVal) * 180.0 / pi;
+            if(rayAngle < light->cutoffAngle){
+                phongModelUtil(tMin, light,newColor,ro,dir, intersectionPoint, normal);
             }
 
         }
+
+        colorI->setColor(newColor);
+
+        // recursive reflection handle
+        if(level >= recursion_level){
+            return tMin;
+        }
+
+        // construct reflected ray from intersection point
+        Vector rayDir;
+        double multiplier = Vector::DotProduct(normal, dir) * 2.0;
+        rayDir.x = dir.x - normal.x * multiplier;
+        rayDir.y = dir.y - normal.y * multiplier;
+        rayDir.z = dir.z - normal.z * multiplier;
+
+        rayDir.Normalize();
+        // actually slightly forward from the point (by moving the
+        // start a little bit towards the reflection direction)
+        // to avoid self intersection
+        Point rayStart = intersectionPoint;
+        rayStart.x += rayDir.x * 0.0000001;
+        rayStart.y += rayDir.y * 0.0000001;
+        rayStart.z += rayDir.z * 0.0000001;
+
+        Ray *reflectedRay = new Ray(rayStart, rayDir);
+
+        // find tmin from the nearest intersecting object, using
+        // intersect() method, as done in the capture() method
+        int nearest = -1;
+        double tRef, tMinRef = INFINITY;
+        Color *dummyColor = new Color();
+        Color *refColor = new Color();
+        for(int i=0; i< objects.size(); i++){
+            tRef = objects[i]->intersect(reflectedRay, dummyColor, 0);
+            if(tRef > 0 && tRef < tMinRef){
+                tMinRef = tRef;
+                nearest = i;
+            }
+        }
+        // if found, call intersect(rreflected, colorreflected, level+1)
+        if(nearest != -1){
+            tMinRef = objects[nearest]->intersectionPhongModel(reflectedRay,refColor, level+1 );
+            newColor.r = refColor->r * coefficients[REFLECTION];
+            newColor.Normalize();
+        }
+        delete reflectedRay;
+        delete dummyColor;
 
         colorI->setColor(newColor);
         return tMin;
@@ -464,39 +567,7 @@ public:
     void draw() {
         glPushMatrix();
         glTranslatef(reference_point.x, reference_point.y, reference_point.z);
-        struct Point points[100][100];
-        int i,j;
-        double h,r;
-        int stacks = 50;
-        int slices = 50;
-        //generate points
-        for(i=0;i<=stacks;i++){
-            h=radius*sin(((double)i/(double)stacks)*(pi/2));
-            r=radius*cos(((double)i/(double)stacks)*(pi/2));
-            for(j=0;j<=slices;j++){
-                points[i][j].x=r*cos(((double)j/(double)slices)*2*pi);
-                points[i][j].y=r*sin(((double)j/(double)slices)*2*pi);
-                points[i][j].z=h;
-            }
-        }
-        //draw quads using generated points
-        for(i=0;i<stacks;i++){
-            glColor3f(color.r, color.g, color.b);
-            for(j=0;j<slices;j++){
-                glBegin(GL_QUADS);{
-                    //upper hemisphere
-                    glVertex3f(points[i][j].x,points[i][j].y,points[i][j].z);
-                    glVertex3f(points[i][j+1].x,points[i][j+1].y,points[i][j+1].z);
-                    glVertex3f(points[i+1][j+1].x,points[i+1][j+1].y,points[i+1][j+1].z);
-                    glVertex3f(points[i+1][j].x,points[i+1][j].y,points[i+1][j].z);
-                    //lower hemisphere
-                    glVertex3f(points[i][j].x,points[i][j].y,-points[i][j].z);
-                    glVertex3f(points[i][j+1].x,points[i][j+1].y,-points[i][j+1].z);
-                    glVertex3f(points[i+1][j+1].x,points[i+1][j+1].y,-points[i+1][j+1].z);
-                    glVertex3f(points[i+1][j].x,points[i+1][j].y,-points[i+1][j].z);
-                }glEnd();
-            }
-        }
+        DrawSphere(radius, color);
         glPopMatrix();
     }
 
@@ -609,15 +680,15 @@ public:
     }
 
     bool isInReferenceCube(Vector &v){
-        if(v.x < reference_point.x || v.x > reference_point.x + length){
+        if((v.x < reference_point.x || v.x > reference_point.x + length) && length != 0){
             return false;
         }
 
-        if(v.y < reference_point.y || v.y > reference_point.y + width){
+        if((v.y < reference_point.y || v.y > reference_point.y + width) && width != 0){
             return false;
         }
 
-        if(v.z < reference_point.z || v.z > reference_point.z + height){
+        if((v.z < reference_point.z || v.z > reference_point.z + height) && height != 0){
             return false;
         }
         return true;
