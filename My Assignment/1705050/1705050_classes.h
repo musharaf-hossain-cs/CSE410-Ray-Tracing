@@ -99,6 +99,13 @@ struct Color{
         b = c.b;
     }
 
+    void Scale(double s){
+        r *= s;
+        g *= s;
+        b *= s;
+        Normalize();
+    }
+
     void Normalize(){
         if(r < 0) r = 0.0;
         if(r > 1) r = 1.0;
@@ -106,6 +113,20 @@ struct Color{
         if(g > 1) g = 1.0;
         if(b < 0) b = 0.0;
         if(b > 1) b = 1.0;
+
+//        double M = 1.0;
+//        if(r > M){
+//            M = r;
+//        }
+//        if(g > M){
+//            M = g;
+//        }
+//        if(b > M){
+//            M = b;
+//        }
+//        r /= M;
+//        g /= M;
+//        b /= M;
 
     }
 };
@@ -122,6 +143,105 @@ public:
         this->dir.Normalize();
     }
 };
+
+
+class Light {
+public:
+    Point light_pos;
+    Color color;
+
+    Light(){};
+
+    virtual void draw(){
+        // this function will be overridden
+    }
+
+    void setPosition(Point &pos){
+        light_pos = pos;
+    }
+
+    void setColor(Color &color){
+        this->color = color;
+        this->color.Normalize();
+    }
+
+    void setColor(double R, double G, double B){
+        color.r = R;
+        color.g = G;
+        color.b = B;
+        this->color.Normalize();
+    }
+};
+
+class PointLight : public Light {
+public:
+    PointLight(Point &pos, Color &c){
+        light_pos = pos;
+        color = c;
+        color.Normalize();
+    }
+
+    PointLight(Point &pos){
+        light_pos = pos;
+    }
+
+    PointLight(){}
+
+    void draw(){
+        glPushMatrix();
+
+        glColor3f(color.r, color.g, color.b);
+        glBegin(GL_POINTS); {
+            glVertex3f(light_pos.x, light_pos.y, light_pos.z);
+        }glEnd();
+
+        glPopMatrix();
+    }
+
+};
+
+class SpotLight : public Light {
+public:
+    Vector direction;
+    double cutoffAngle;
+
+    SpotLight(){
+        cutoffAngle = 0;
+    }
+
+    SpotLight(Point &pos, Color &c, Vector &dir, double coa=0.0){
+        light_pos = pos;
+        color = c;
+        direction = dir;
+        cutoffAngle = coa;
+        color.Normalize();
+    }
+
+    SpotLight(Vector &dir, double coa) {
+        direction = dir;
+        cutoffAngle = coa;
+    }
+
+    void draw(){
+        glPushMatrix();
+
+        glColor3f(color.r, color.g, color.b);
+        glBegin(GL_POINTS); {
+            glVertex3f(light_pos.x, light_pos.y, light_pos.z);
+        }glEnd();
+
+        glPopMatrix();
+    }
+
+    void setDirection(Vector &dir){
+        direction = dir;
+    }
+
+    void setCutOffAngle(double coa){
+        cutoffAngle = coa;
+    }
+};
+
 
 
 
@@ -154,6 +274,119 @@ public:
 
     virtual double intersect(Ray *r, Color *colorI, int level){
         return -1.0;
+    }
+
+    double intersectionPhongModel(Ray *r, Color *colorI, int level){
+        double tMin = intersect(r,colorI, level);
+
+        // if level is 0, return tmin
+        if(level == 0){
+            return tMin;
+        }
+
+        Vector ro(Point(), r->start);
+        Vector dir = r->dir;
+
+        // intersectionPoint = r->start + r->dir*tmin
+        Point intersectionPoint;
+        intersectionPoint.x = ro.x + dir.x * tMin;
+        intersectionPoint.y = ro.y + dir.y * tMin;
+        intersectionPoint.z = ro.z + dir.z * tMin;
+
+        // color = intersectionPointColor*coEfficient[AMB]
+        Color newColor = getIntersectionPointColor(intersectionPoint);
+        newColor.Scale(coefficients[AMBIENT]);
+
+        // calculate normal at intersectionPoint
+        Vector normal = this->calculateNormal(intersectionPoint);
+
+        // for each point light pl in pointLights
+        for(PointLight *light: pointLights){
+            // cast rayl from pl.light_pos to intersectionPoint
+            Point lightPos = light->light_pos;
+            Vector rayDir = Vector(intersectionPoint, lightPos );
+            rayDir.Normalize();
+
+            Ray *lightRay = new Ray(intersectionPoint, rayDir);
+
+            // if intersectionPoint is in shadow, the diffuse
+            // and specular components need not be calculated
+            // for shadow, other object needed between light and object
+            bool shadow = false;
+            double t, tMin2;
+            tMin2 = INFINITY;
+            Color *dummy = new Color();
+
+            for(Object *o: objects){
+                t = o->intersect(lightRay,dummy, 0);
+                if(t > 0 && t < tMin2){
+                    tMin2 = t;
+                }
+            }
+
+//            if(tMin > tMin2){ // another object in between
+//                shadow = true;
+//            }
+
+            Point n;
+            n.x = ro.x + dir.x * tMin;
+            n.y = ro.y + dir.y * tMin;
+            n.z = ro.z + dir.z * tMin;
+
+            Point m = intersectionPoint;
+
+            double dist1 = sqrt(pow(m.x-ro.x, 2) + pow(m.y-ro.y, 2) + pow(m.z-ro.z, 2));
+            double dist2 = sqrt(pow(n.x-ro.x, 2) + pow(n.y-ro.y, 2) + pow(n.z-ro.z, 2));
+
+            if((dist1 - 0.0000001) > dist2) shadow = true;
+
+            if(!shadow){
+                // calculate lambertValue using normal, rayl
+                double dotValue = Vector::DotProduct(normal,rayDir);
+                double lambertValue;
+                if(dotValue < 0.0) lambertValue = 0.0;
+                else lambertValue = dotValue;
+
+                // find reflected ray, rayr for rayl
+                double multiplier = dotValue * 2.0;
+                Vector reflection;
+                reflection.x = normal.x * multiplier - rayDir.x;
+                reflection.y = normal.y * multiplier - rayDir.y;
+                reflection.z = normal.z * multiplier - rayDir.z;
+
+                reflection.Normalize();
+
+                // calculate phongValue using r, rayr
+                double phongValue = Vector::DotProduct(dir, reflection);
+                if(phongValue < 0.0) phongValue = 0.0;
+
+                double phongShine = pow(phongValue, shine);
+
+                // color += pl.color*coEfficient[DIFF]*lambertValue*intersectionPointColor
+                newColor.r += light->color.r * coefficients[DIFFUSE] * lambertValue * getIntersectionPointColor(intersectionPoint).r;
+                newColor.g += light->color.g * coefficients[DIFFUSE] * lambertValue * getIntersectionPointColor(intersectionPoint).g;
+                newColor.b += light->color.b * coefficients[DIFFUSE] * lambertValue * getIntersectionPointColor(intersectionPoint).b;
+                newColor.Normalize();
+                // color+= pl.color*coEfficient[SPEC]*phongValueshine * intersectionPointColor
+                newColor.r += light->color.r * coefficients[SPECULAR] * phongShine * getIntersectionPointColor(intersectionPoint).r;
+                newColor.g += light->color.g * coefficients[SPECULAR] * phongShine * getIntersectionPointColor(intersectionPoint).g;
+                newColor.b += light->color.b * coefficients[SPECULAR] * phongShine * getIntersectionPointColor(intersectionPoint).b;
+
+                newColor.Normalize();
+            }
+
+        }
+
+        colorI->setColor(newColor);
+        return tMin;
+    }
+
+    virtual Vector calculateNormal(Point &p){
+        return Vector();
+    }
+
+    virtual Color getIntersectionPointColor(Point &p){
+        return color;
     }
 
     void setColor(Color color){
@@ -214,12 +447,15 @@ public:
         double tPlus = (- b + d) / 2.0;
         double tMinus = (-b - d) / 2.0;
 
+        Color newColor(color);
+
+
         if(tMinus > 0) {
-            colorI->setColor(color);
+            colorI->setColor(newColor);
             return tMinus;
         }
         else if(tPlus > 0) {
-            colorI->setColor(color);
+            colorI->setColor(newColor);
             return tPlus;
         }
         else return -1;
@@ -264,6 +500,11 @@ public:
         glPopMatrix();
     }
 
+    Vector calculateNormal(Point &p){
+        Vector n(reference_point, p);
+        n.Normalize();
+        return n;
+    }
 };
 
 class Triangle : public Object {
@@ -328,6 +569,14 @@ public:
             glVertex3f(points[2].x, points[2].y, points[2].z);
         }glEnd();
         glPopMatrix();
+    }
+
+    Vector calculateNormal(Point &p){
+        Vector ab(points[0], points[1]);
+        Vector ac(points[0], points[2]);
+        Vector n = Vector::CrossProduct(ab, ac);
+        n.Normalize();
+        return n;
     }
 };
 
@@ -428,6 +677,15 @@ public:
         glPopMatrix();
     }
 
+    Vector calculateNormal(Point &p){
+        double nx = 2.0 * A * p.x + D * p.y + E * p.z + G;
+        double ny = 2.0 * B * p.y + D * p.x + F * p.z + H;
+        double nz = 2.0 * C * p.z + E * p.x + F * p.y + I;
+        Vector n(nx,ny,nz);
+        n.Normalize();
+        return n;
+    }
+
 };
 
 class Floor : public Object {
@@ -453,10 +711,10 @@ public:
         return true;
     }
 
-    Color getPixelColor(double x, double y){
+    Color getIntersectionPointColor(Point &p){
         double start = (double)(-tileCount*tileWidth/2);
-        int i = (int)((x - start)/tileWidth);
-        int j = (int)((y - start)/tileWidth);
+        int i = (int)((p.x - start)/tileWidth);
+        int j = (int)((p.y - start)/tileWidth);
         if((i+j)%2){
             return Color(0.0,0.0,0.0);
         }
@@ -480,7 +738,7 @@ public:
         intersectingPoint.z = ro.z + dir.z * t;
 
         if(isInReferenceRegion(intersectingPoint) && t > 0){
-            colorI->setColor(getPixelColor(intersectingPoint.x, intersectingPoint.y));
+            colorI->setColor(getIntersectionPointColor(intersectingPoint));
             return t;
         }
 
@@ -506,106 +764,12 @@ public:
 
         glPopMatrix();
     }
-};
 
-
-
-class Light {
-public:
-    Point light_pos;
-    Color color;
-
-    Light(){};
-
-    virtual void draw(){
-        // this function will be overridden
-    }
-
-    void setPosition(Point &pos){
-        light_pos = pos;
-    }
-
-    void setColor(Color &color){
-        this->color = color;
-        this->color.Normalize();
-    }
-
-    void setColor(double R, double G, double B){
-        color.r = R;
-        color.g = G;
-        color.b = B;
-        this->color.Normalize();
+    Vector calculateNormal(Point &p){
+        return Vector(0.0,0.0,1.0);
     }
 };
 
-class PointLight : public Light {
-public:
-    PointLight(Point &pos, Color &c){
-        light_pos = pos;
-        color = c;
-        color.Normalize();
-    }
-
-    PointLight(Point &pos){
-        light_pos = pos;
-    }
-
-    PointLight(){}
-
-    void draw(){
-        glPushMatrix();
-
-        glColor3f(color.r, color.g, color.b);
-        glBegin(GL_POINTS); {
-            glVertex3f(light_pos.x, light_pos.y, light_pos.z);
-        }glEnd();
-
-        glPopMatrix();
-    }
-
-};
-
-class SpotLight : public Light {
-public:
-    Vector direction;
-    double cutoffAngle;
-
-    SpotLight(){
-        cutoffAngle = 0;
-    }
-
-    SpotLight(Point &pos, Color &c, Vector &dir, double coa=0.0){
-        light_pos = pos;
-        color = c;
-        direction = dir;
-        cutoffAngle = coa;
-        color.Normalize();
-    }
-
-    SpotLight(Vector &dir, double coa) {
-        direction = dir;
-        cutoffAngle = coa;
-    }
-
-    void draw(){
-        glPushMatrix();
-
-        glColor3f(color.r, color.g, color.b);
-        glBegin(GL_POINTS); {
-            glVertex3f(light_pos.x, light_pos.y, light_pos.z);
-        }glEnd();
-
-        glPopMatrix();
-    }
-
-    void setDirection(Vector &dir){
-        direction = dir;
-    }
-
-    void setCutOffAngle(double coa){
-        cutoffAngle = coa;
-    }
-};
 
 
 

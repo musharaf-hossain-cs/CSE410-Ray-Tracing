@@ -1,5 +1,5 @@
 # depslib dependency file v1.0
-1660924861 source:h:\desktop_files\cse410-offlines\assignment-3\my assignment\1705050\main.cpp
+1660933297 source:h:\desktop_files\cse410-offlines\assignment-3\my assignment\1705050\main.cpp
 	"1705050_classes.h"
 	"bitmap_image.hpp"
 	<windows.h>
@@ -71,7 +71,7 @@
 1526093416 c:\program files\codeblocks\mingw\x86_64-w64-mingw32\include\math.h
 	<crtdefs.h>
 
-1660925050 h:\desktop_files\cse410-offlines\assignment-3\my assignment\1705050\1705050_classes.h
+1660935015 h:\desktop_files\cse410-offlines\assignment-3\my assignment\1705050\1705050_classes.h
 	<bits/stdc++.h>
 	<stdio.h>
 	<stdlib.h>

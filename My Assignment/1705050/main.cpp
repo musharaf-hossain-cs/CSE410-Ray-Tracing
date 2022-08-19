@@ -444,7 +444,7 @@ void capture(){
             int size = objects.size();
             for(int k = 0; k < size; k++){
                 // t = o.intersect(ray, dummyColor, 0)
-                t = objects[k]->intersect(ray, color, 0);
+                t = objects[k]->intersectionPhongModel(ray, color, 0);
 
                 // update t so that it stores min +ve value
                 if(t > 0 && t < tMin){
@@ -456,7 +456,7 @@ void capture(){
 
             if(nearest != -1){
                 // tMin = On->intersect(ray, color, 1)
-                tMin = objects[nearest]->intersect(ray, color, 1);
+                tMin = objects[nearest]->intersectionPhongModel(ray, color, 1);
             }
 
             // update image pixel (i,j)
@@ -610,6 +610,10 @@ void display(){
 
     for(Object *o : objects){
         o->draw();
+    }
+
+    for(PointLight *light : pointLights){
+        light->draw();
     }
     //drawSquare(100);
 
