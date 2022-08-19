@@ -19,6 +19,7 @@ using namespace std;
 class Object;
 class PointLight;
 class SpotLight;
+class Ray;
 
 extern vector<Object*> objects;
 extern vector<PointLight*> pointLights;
@@ -47,6 +48,11 @@ struct Vector{
         this->x = x;
         this->y = y;
         this->z = z;
+    }
+    Vector(Point p, Point q){
+        this->x = q.x - p.x;
+        this->y = q.y - p.y;
+        this->z = q.z - p.z;
     }
 
     void Normalize(){
@@ -79,12 +85,18 @@ struct Vector{
 struct Color{
     double r,g,b;
     Color(){
-        r=g=b=1.0;
+        r=g=b=0.0;
     }
     Color(double R, double G, double B){
         r = R;
         g = G;
         b = B;
+    }
+
+    void setColor(Color c){
+        r = c.r;
+        g = c.g;
+        b = c.b;
     }
 
     void Normalize(){
@@ -99,9 +111,22 @@ struct Color{
 };
 
 
+class Ray {
+public:
+    Point start;
+    Vector dir;
+
+    Ray(Point &start, Vector dir){
+        this->start = start;
+        this->dir = dir;
+        this->dir.Normalize();
+    }
+};
+
+
 
 class Object {
-protected:
+public:
     Point reference_point;
     double height, width, length;
     Color color;
@@ -112,7 +137,6 @@ protected:
     // 3 -> reflection coefficients
     int shine; // exponent term of specular component
 
-public:
     Object(){
         height = 0;
         width = 0;
@@ -126,6 +150,10 @@ public:
 
     virtual void draw(){
         // this function will be overridden
+    }
+
+    virtual double intersect(Ray *r, Color *colorI, int level){
+        return -1.0;
     }
 
     void setColor(Color color){
@@ -155,15 +183,46 @@ public:
 
 class Sphere : public Object {
 public:
+    double radius;
 
     Sphere(){
         reference_point = Point();
-        length = 0;
+        radius = 0;
     }
 
     Sphere(Point center, double radius){
         reference_point = center;
-        length = radius;
+        this->radius = radius;
+    }
+
+    double intersect(Ray *r, Color *colorI, int level){
+        /// ref : Slide-30
+        Vector ro;
+        ro.x = r->start.x - reference_point.x;
+        ro.y = r->start.y - reference_point.y;
+        ro.z = r->start.z - reference_point.z;
+
+        Vector dir = r->dir;
+        double b = 2.0 * Vector::DotProduct(dir, ro);
+        double c = Vector::DotProduct(ro, ro) - radius * radius;
+        // a = 1
+        double d = b * b - 4.0 * c;
+        if(d < 0){
+            return -1;
+        }
+        d = sqrt(d);
+        double tPlus = (- b + d) / 2.0;
+        double tMinus = (-b - d) / 2.0;
+
+        if(tMinus > 0) {
+            colorI->setColor(color);
+            return tMinus;
+        }
+        else if(tPlus > 0) {
+            colorI->setColor(color);
+            return tPlus;
+        }
+        else return -1;
     }
 
     void draw() {
@@ -172,7 +231,6 @@ public:
         struct Point points[100][100];
         int i,j;
         double h,r;
-        double radius = this->length;
         int stacks = 50;
         int slices = 50;
         //generate points
@@ -187,7 +245,7 @@ public:
         }
         //draw quads using generated points
         for(i=0;i<stacks;i++){
-            glColor3f((double)i/(double)stacks,(double)i/(double)stacks,(double)i/(double)stacks);
+            glColor3f(color.r, color.g, color.b);
             for(j=0;j<slices;j++){
                 glBegin(GL_QUADS);{
                     //upper hemisphere
@@ -218,6 +276,47 @@ public:
         this->points[0] = a;
         this->points[1] = b;
         this->points[2] = c;
+    }
+
+    double intersect(Ray *r, Color *colorI, int level){
+        /// ref : Slide
+        Vector ro(Point(), r->start);
+        Vector dir = r->dir;
+
+        Vector ab(points[0], points[1]);
+        Vector ac(points[0], points[2]);
+
+        Vector temp = Vector::CrossProduct(dir, ac);
+        double alpha = Vector::DotProduct(ab, temp);
+
+        // alpha will be zero if ray is parallel to the triangle plane
+        if(abs(alpha) < 0.0000001){
+            return -1;
+        }
+
+        Vector ao(points[0], r->start);
+        double beta = Vector::DotProduct(ao, temp) / alpha;
+
+        // value of beta must be in range [0,1]
+        if(beta < 0 || beta > 1.0) {
+            return -1;
+        }
+
+        temp = Vector::CrossProduct(ao, ab);
+        double gama = Vector::DotProduct(dir, temp) / alpha;
+
+        // value of gama must be greater than 0
+        // and beta + gama must not greater than 1
+        if(gama < 0 || beta + gama > 1.0){
+            return -1;
+        }
+
+        double t = Vector::DotProduct(ac, temp) / alpha;
+        if(t < 0.0000001){
+            return -1;
+        }
+        colorI->setColor(color);
+        return t;
     }
 
     void draw(){
@@ -260,6 +359,68 @@ public:
         J = j;
     }
 
+    bool isInReferenceCube(Vector &v){
+        if(v.x < reference_point.x || v.x > reference_point.x + length){
+            return false;
+        }
+
+        if(v.y < reference_point.y || v.y > reference_point.y + width){
+            return false;
+        }
+
+        if(v.z < reference_point.z || v.z > reference_point.z + height){
+            return false;
+        }
+        return true;
+    }
+
+    double intersect(Ray *r, Color *colorI, int level){
+        /// ref : http://skuld.bmsc.washington.edu/people/merritt/graphics/quadrics.html
+        Vector ro(Point(), r->start);
+        Vector dir = r->dir;
+
+        double a = A * dir.x * dir.x + B * dir.y * dir.y + C * dir.z * dir.z
+                    + D * dir.x * dir.y + E * dir.x * dir.z + F * dir.y * dir.z;
+
+        double b = 2.0 * (A * ro.x * dir.x + B * ro.y * dir.y + C * ro.z * dir.z )
+                    + D * (ro.x * dir.y + ro.y * dir.x) + E * (ro.x * dir.z + ro.z * dir.x)
+                    + F * (ro.y * dir.z + ro.z * dir.y) + G * dir.x + H * dir.y + I * dir.z;
+
+        double c = A * ro.x * ro.x + B * ro.y * ro.y + C * ro.z * ro.z + D * ro.x * ro.y
+                    + E * ro.x * ro.z + F * ro.y * ro.z + G * ro.x + H * ro.y + I * ro.z + J;
+
+        double d = b * b - 4.0 * a * c;
+
+        if(d < 0){
+            return -1;
+        }
+
+        d = sqrt(d);
+
+        double tPlus = (- b + d)/(2.0 * a);
+        double tMinus = (- b - d)/(2.0 * a);
+
+        Vector pPlus, pMinus;
+
+        pPlus.x = ro.x + dir.x * tPlus;
+        pPlus.y = ro.y + dir.y * tPlus;
+        pPlus.z = ro.z + dir.z * tPlus;
+
+        pMinus.x = ro.x + dir.x * tMinus;
+        pMinus.y = ro.y + dir.y * tMinus;
+        pMinus.z = ro.z + dir.z * tMinus;
+
+        if(tMinus > 0 && isInReferenceCube(pMinus)) {
+            colorI->setColor(color);
+            return tMinus;
+        }
+        else if(tPlus > 0 && isInReferenceCube(pPlus)) {
+            colorI->setColor(color);
+            return tPlus;
+        }
+        else return -1;
+    }
+
     void draw(){
         glPushMatrix();
         // no need to draw this
@@ -280,6 +441,50 @@ public:
         reference_point = Point(-width/2, -width/2, 0);
         tileCount = ceil(width / tile);
         tileWidth = tile;
+    }
+
+    bool isInReferenceRegion(Point p){
+        if(p.x < reference_point.x || p.x > -reference_point.x){
+            return false;
+        }
+        if(p.y < reference_point.y || p.y > -reference_point.y){
+            return false;
+        }
+        return true;
+    }
+
+    Color getPixelColor(double x, double y){
+        double start = (double)(-tileCount*tileWidth/2);
+        int i = (int)((x - start)/tileWidth);
+        int j = (int)((y - start)/tileWidth);
+        if((i+j)%2){
+            return Color(0.0,0.0,0.0);
+        }
+        else {
+            return Color(1.0,1.0,1.0);
+        }
+    }
+
+    double intersect(Ray *r, Color *colorI, int level){
+        Vector ro(Point(), r->start);
+        Vector dir = r->dir;
+        Vector n(0.0, 0.0, 1.0);
+
+        double DotRo = Vector::DotProduct(n, ro);
+        double DotDir = Vector::DotProduct(n, dir);
+
+        double t = - DotRo/DotDir;
+        Point intersectingPoint;
+        intersectingPoint.x = ro.x + dir.x * t;
+        intersectingPoint.y = ro.y + dir.y * t;
+        intersectingPoint.z = ro.z + dir.z * t;
+
+        if(isInReferenceRegion(intersectingPoint) && t > 0){
+            colorI->setColor(getPixelColor(intersectingPoint.x, intersectingPoint.y));
+            return t;
+        }
+
+        return -1;
     }
 
     void draw(){
@@ -404,17 +609,6 @@ public:
 
 
 
-class Ray {
-public:
-    Point start;
-    Vector dir;
-
-    Ray(Point &start, Vector dir){
-        this->start = start;
-        this->dir = dir;
-        this->dir.Normalize();
-    }
-};
 
 
 

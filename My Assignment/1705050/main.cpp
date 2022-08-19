@@ -1,5 +1,7 @@
 #include "1705050_classes.h"
 #include "bitmap_image.hpp"
+#include<windows.h>
+#include<string>
 
 
 
@@ -21,6 +23,8 @@ vector<SpotLight*> spotLights;
 
 int recursion_level;
 int dimension;
+
+string absolutePath = "H:\\Ray\\";
 
 
 int windowWidth = 500, windowHeight = 500;
@@ -247,17 +251,24 @@ void tiltCW(){
 
 ///Input
 void loadData(){
+//    TCHAR buffer[MAX_PATH] = { 0 };
+//    GetModuleFileName( NULL, buffer, MAX_PATH );
+//    //std::wstring::size_type pos = std::wstring(buffer).find_last_of(L"\\/");
+//    cout<<string(buffer)<<endl;
+
     ifstream input;
-    input.open("scene.txt");
+    input.open( absolutePath+"scene.txt");
 
     if(!input){
         cout<<"Failed to load scene.txt file"<<endl;
+        return;
     }
 
     input >> recursion_level >> dimension;
 
     int objectCount;
     input >> objectCount;
+    cout<<objectCount<<endl;
 
     string shape;
     double x,y,z,R,G,B;
@@ -413,6 +424,8 @@ void capture(){
     for(int i=0; i<dimension; i++){
         // for j=1:imageHeight
         for(int j=0; j<dimension; j++){
+            nearest = -1;
+            tMin = INFINITY;
             // calculate curPixel using topleft,r,u,i,j,du,dv
             curPixel.x = topLeft.x + r.x * (du * i) - u.x * (j * dv);
             curPixel.y = topLeft.y + r.y * (du * i) - u.y * (j * dv);
@@ -423,19 +436,38 @@ void capture(){
             dir.x = curPixel.x - pos.x;
             dir.y = curPixel.y - pos.y;
             dir.z = curPixel.z - pos.z;
-            Ray ray(pos, dir);
+            Ray *ray = new Ray(pos, dir);
 
-            Color color;
+            Color *color = new Color();
 
             // for each object, o in objects
-            for(Object* o: objects){
-                ;
-                /// will be done later
-                /// after completing intersect method
+            int size = objects.size();
+            for(int k = 0; k < size; k++){
+                // t = o.intersect(ray, dummyColor, 0)
+                t = objects[k]->intersect(ray, color, 0);
+
+                // update t so that it stores min +ve value
+                if(t > 0 && t < tMin){
+                    tMin = t;
+                    // save the nearest object, On
+                    nearest = k;
+                }
             }
+
+            if(nearest != -1){
+                // tMin = On->intersect(ray, color, 1)
+                tMin = objects[nearest]->intersect(ray, color, 1);
+            }
+
+            // update image pixel (i,j)
+            image.set_pixel(i, j, (int)(color->r * 255), (int)(color->g * 255), (int)(color->b * 255) );
 
         }
     }
+
+    // save image
+    image.save_image(absolutePath + "output.bmp");
+    image.clear();
 
 }
 
@@ -575,7 +607,11 @@ void display(){
 	drawGrid();
 
     glColor3f(1,0,0);
-    drawSquare(100);
+
+    for(Object *o : objects){
+        o->draw();
+    }
+    //drawSquare(100);
 
 	//drawSphere(50,50,50);
 
@@ -586,8 +622,8 @@ void display(){
 
 
 void animate(){
-	angle+=0.05;
-	//codes for any changes in Models, Camera
+	// angle+=0.05;
+	// codes for any changes in Models, Camera
 	glutPostRedisplay();
 }
 
@@ -636,14 +672,17 @@ void init(){
 }
 
 int main(int argc, char **argv){
+    loadData();
+    //capture();
 	glutInit(&argc,argv);
-	glutInitWindowSize(500, 500);
+	glutInitWindowSize(windowWidth, windowHeight);
 	glutInitWindowPosition(0, 0);
 	glutInitDisplayMode(GLUT_DEPTH | GLUT_DOUBLE | GLUT_RGB);	//Depth, Double buffer, RGB color
 
 	glutCreateWindow("My OpenGL Program");
 
 	init();
+
 
 	glEnable(GL_DEPTH_TEST);	//enable Depth Testing
 
@@ -656,5 +695,9 @@ int main(int argc, char **argv){
 
 	glutMainLoop();		//The main loop of OpenGL
 
+
+    objects.clear();
+    pointLights.clear();
+    spotLights.clear();
 	return 0;
 }

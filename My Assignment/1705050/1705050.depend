@@ -1,6 +1,9 @@
 # depslib dependency file v1.0
-1660840286 source:h:\desktop_files\cse410-offlines\assignment-3\my assignment\1705050\main.cpp
+1660924861 source:h:\desktop_files\cse410-offlines\assignment-3\my assignment\1705050\main.cpp
 	"1705050_classes.h"
+	"bitmap_image.hpp"
+	<windows.h>
+	<string>
 
 1526093414 c:\program files\codeblocks\mingw\x86_64-w64-mingw32\include\stdio.h
 	<crtdefs.h>
@@ -68,7 +71,7 @@
 1526093416 c:\program files\codeblocks\mingw\x86_64-w64-mingw32\include\math.h
 	<crtdefs.h>
 
-1660842189 h:\desktop_files\cse410-offlines\assignment-3\my assignment\1705050\1705050_classes.h
+1660925050 h:\desktop_files\cse410-offlines\assignment-3\my assignment\1705050\1705050_classes.h
 	<bits/stdc++.h>
 	<stdio.h>
 	<stdlib.h>
@@ -902,4 +905,14 @@
 
 1526093414 c:\program files\codeblocks\mingw\x86_64-w64-mingw32\include\gl\glu.h
 	<GL/gl.h>
+
+1492200750 h:\desktop_files\cse410-offlines\assignment-3\my assignment\1705050\bitmap_image.hpp
+	<algorithm>
+	<cmath>
+	<cstdlib>
+	<fstream>
+	<iostream>
+	<iterator>
+	<limits>
+	<string>
 
