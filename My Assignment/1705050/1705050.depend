@@ -1,6 +1,6 @@
 # depslib dependency file v1.0
-1660941691 source:h:\desktop_files\cse410-offlines\assignment-3\my assignment\1705050\main.cpp
-	"1705050_classes.h"
+1660944310 source:h:\desktop_files\cse410-offlines\assignment-3\my assignment\1705050\main.cpp
+	"1705050_Header.h"
 	"bitmap_image.hpp"
 	<windows.h>
 	<string>
@@ -915,4 +915,12 @@
 	<iterator>
 	<limits>
 	<string>
+
+1660969852 h:\desktop_files\cse410-offlines\assignment-3\my assignment\1705050\1705050_header.h
+	<bits/stdc++.h>
+	<stdio.h>
+	<stdlib.h>
+	<math.h>
+	<windows.h>
+	<GL\glut.h>
 

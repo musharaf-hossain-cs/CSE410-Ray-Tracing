@@ -320,6 +320,8 @@ public:
         rayStart.y += rayDir.y * 0.000000001;
         rayStart.z += rayDir.z * 0.000000001;
 
+        //Vector rayDir2(lightPos, intersectionPoint);
+
         Ray *lightRay = new Ray(rayStart, rayDir);
 
         // if intersectionPoint is in shadow, the diffuse
@@ -355,13 +357,15 @@ public:
 
         if(!shadow){
             // calculate lambertValue using normal, rayl
-            double dotValue = Vector::DotProduct(normal,rayDir);
+
+            double dotValue2 = Vector::DotProduct(normal,rayDir);
             double lambertValue;
-            if(dotValue < 0.0) lambertValue = 0.0;
-            else lambertValue = dotValue;
+            if(dotValue2 < 0.0) lambertValue = 0.0;
+            else lambertValue = dotValue2;
 
             // find reflected ray, rayr for rayl
             // rayr = 2(dir . normal)normal – dir
+            double dotValue = Vector::DotProduct(normal,rayDir);
             double multiplier = dotValue * 2.0;
             Vector reflection;
             reflection.x = normal.x * multiplier - rayDir.x;
@@ -371,6 +375,10 @@ public:
             reflection.Normalize();
 
             // calculate phongValue using r, rayr
+//            Vector negDir;
+//            negDir.x = -dir.x;
+//            negDir.y = -dir.y;
+//            negDir.z = -dir.z;
             double phongValue = Vector::DotProduct(dir, reflection);
             if(phongValue < 0.0) phongValue = 0.0;
 
@@ -425,9 +433,10 @@ public:
         for(SpotLight *light: spotLights){
             Vector rayDir = Vector(intersectionPoint, light->light_pos);
             rayDir.Normalize();
-            double dotVal = Vector::DotProduct(rayDir, dir);
+            double dotVal = -Vector::DotProduct(rayDir, dir);
             double rayAngle = acos(dotVal) * 180.0 / pi;
             if(rayAngle < light->cutoffAngle){
+                //newColor.setColor(Color(0,1.0,0));
                 phongModelUtil(tMin, light,newColor,ro,dir, intersectionPoint, normal);
             }
 
